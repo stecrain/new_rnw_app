@@ -1,0 +1,257 @@
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative.Cxx/ModuleRegistration.cpp b/node_modules/react-native-windows/Microsoft.ReactNative.Cxx/ModuleRegistration.cpp
+index d1d296e..da36206 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative.Cxx/ModuleRegistration.cpp
++++ b/node_modules/react-native-windows/Microsoft.ReactNative.Cxx/ModuleRegistration.cpp
+@@ -14,14 +14,22 @@ ModuleRegistration::ModuleRegistration(wchar_t const *moduleName) noexcept : m_m
+ 
+ void AddAttributedModules(IReactPackageBuilder const &packageBuilder) noexcept {
+   for (auto const *reg = ModuleRegistration::Head(); reg != nullptr; reg = reg->Next()) {
+-    packageBuilder.AddModule(reg->ModuleName(), reg->MakeModuleProvider());
++    if (reg->RequiresUIThread()) {
++      packageBuilder.AddUIThreadModule(reg->ModuleName(), reg->MakeModuleProvider());
++    } else {
++      packageBuilder.AddModule(reg->ModuleName(), reg->MakeModuleProvider());
++    }
+   }
+ }
+ 
+ bool TryAddAttributedModule(IReactPackageBuilder const &packageBuilder, std::wstring_view moduleName) noexcept {
+   for (auto const *reg = ModuleRegistration::Head(); reg != nullptr; reg = reg->Next()) {
+     if (moduleName == reg->ModuleName()) {
+-      packageBuilder.AddModule(moduleName, reg->MakeModuleProvider());
++      if (reg->RequiresUIThread()) {
++        packageBuilder.AddUIThreadModule(reg->ModuleName(), reg->MakeModuleProvider());
++      } else {
++        packageBuilder.AddModule(reg->ModuleName(), reg->MakeModuleProvider());
++      }
+       return true;
+     }
+   }
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative.Cxx/ModuleRegistration.h b/node_modules/react-native-windows/Microsoft.ReactNative.Cxx/ModuleRegistration.h
+index ef6560b..7b2b825 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative.Cxx/ModuleRegistration.h
++++ b/node_modules/react-native-windows/Microsoft.ReactNative.Cxx/ModuleRegistration.h
+@@ -90,9 +90,14 @@ struct ModuleRegistration {
+     return m_moduleName;
+   }
+ 
++  bool RequiresUIThread() const noexcept {
++    return m_requiresUIThread;
++  }
++
+  private:
+   wchar_t const *m_moduleName{nullptr};
+   ModuleRegistration const *m_next{nullptr};
++  bool m_requiresUIThread = false;
+ 
+   static const ModuleRegistration *s_head;
+ };
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative.Cxx/ReactContext.h b/node_modules/react-native-windows/Microsoft.ReactNative.Cxx/ReactContext.h
+index afbe379..dfe3440 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative.Cxx/ReactContext.h
++++ b/node_modules/react-native-windows/Microsoft.ReactNative.Cxx/ReactContext.h
+@@ -56,6 +56,10 @@ struct ReactContext {
+     m_handle.DispatchEvent(view, eventName, MakeJSValueArgWriter(std::forward<TArgs>(args)...));
+   }
+ 
++  Windows::UI::Xaml::DependencyObject XamlElementFromTag(int64_t tag) noexcept {
++    return m_handle.XamlElementFromTag(tag);
++  }
++
+   friend bool operator==(ReactContext const &left, ReactContext const &right) noexcept {
+     return left.m_handle == right.m_handle;
+   }
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.cpp b/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.cpp
+index ea70f66..d44874e 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.cpp
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.cpp
+@@ -51,4 +51,8 @@ void ReactContext::EmitJSEvent(
+   m_context->CallJSFunction(to_string(eventEmitterName), "emit", std::move(params));
+ }
+ 
++Windows::UI::Xaml::DependencyObject ReactContext::XamlElementFromTag(int64_t tag) noexcept {
++  return m_context->XamlElementFromTag(tag);
++}
++
+ } // namespace winrt::Microsoft::ReactNative
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.h b/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.h
+index 49bb00b..f5ee9de 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.h
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.h
+@@ -25,6 +25,7 @@ struct ReactContext : winrt::implements<ReactContext, IReactContext> {
+       hstring const &eventEmitterName,
+       hstring const &eventName,
+       JSValueArgWriter const &paramsArgWriter) noexcept;
++  Windows::UI::Xaml::DependencyObject XamlElementFromTag(int64_t tag) noexcept;
+ 
+  private:
+   Mso::CntPtr<Mso::React::IReactContext> m_context;
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.idl b/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.idl
+index e5fddda..8845641 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.idl
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.idl
+@@ -12,5 +12,6 @@ namespace Microsoft.ReactNative {
+     void DispatchEvent(Windows.UI.Xaml.FrameworkElement view, String eventName, JSValueArgWriter eventDataArgWriter);
+     void CallJSFunction(String moduleName, String methodName, JSValueArgWriter paramsArgWriter);
+     void EmitJSEvent(String eventEmitterName, String eventName, JSValueArgWriter paramsArgWriter);
++    Windows.UI.Xaml.DependencyObject XamlElementFromTag(Int64 tag);
+   }
+ } // namespace Microsoft.ReactNative
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/Microsoft.ReactNative.vcxproj.user b/node_modules/react-native-windows/Microsoft.ReactNative/Microsoft.ReactNative.vcxproj.user
+new file mode 100644
+index 0000000..dc63f8a
+--- /dev/null
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/Microsoft.ReactNative.vcxproj.user
+@@ -0,0 +1,6 @@
++﻿<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <PropertyGroup>
++    <ShowAllFiles>false</ShowAllFiles>
++  </PropertyGroup>
++</Project>
+\ No newline at end of file
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/NativeModulesProvider.cpp b/node_modules/react-native-windows/Microsoft.ReactNative/NativeModulesProvider.cpp
+index 20de4a5..d32e112 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative/NativeModulesProvider.cpp
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/NativeModulesProvider.cpp
+@@ -22,30 +22,32 @@ namespace winrt::Microsoft::ReactNative {
+ -------------------------------------------------------------------------------*/
+ std::vector<facebook::react::NativeModuleDescription> NativeModulesProvider::GetModules(
+     Mso::CntPtr<Mso::React::IReactContext> const &reactContext,
+-    std::shared_ptr<facebook::react::MessageQueueThread> const & /*defaultQueueThread*/) {
+-  // std::shared_ptr<facebook::react::MessageQueueThread>
+-  // queueThread(defaultQueueThread);
++    std::shared_ptr<facebook::react::MessageQueueThread> const & defaultQueueThread) {
+   std::vector<facebook::react::NativeModuleDescription> modules;
+ 
+-  if (m_modulesWorkerQueue == nullptr) {
+-    // TODO: The queue provided is the UIMessageQueueThread which isn't needed
+-    // for native modules. As a workaround for now let's just use a new worker
+-    // message queue.
++  if (!m_uiThreadmoduleProviders.empty() && m_modulesWorkerQueue == nullptr) {
++    // Most Native Modules should not run on the UI thread
+     m_modulesWorkerQueue = react::uwp::MakeSerialQueueThread();
+   }
+ 
+   auto winrtReactContext = winrt::make<ReactContext>(Mso::Copy(reactContext));
+ 
+-  for (auto &entry : m_moduleProviders) {
+-    modules.emplace_back(
+-        entry.first,
+-        [ moduleName = entry.first, moduleProvider = entry.second, winrtReactContext ]() noexcept {
+-          IReactModuleBuilder moduleBuilder = winrt::make<ReactModuleBuilder>(winrtReactContext);
+-          auto providedModule = moduleProvider(moduleBuilder);
+-          return moduleBuilder.as<ReactModuleBuilder>()->MakeCxxModule(moduleName, providedModule);
+-        },
+-        m_modulesWorkerQueue);
+-  }
++  const auto AddModules = [&modules, &winrtReactContext](std::map<std::string, ReactModuleProvider> moduleProviders,
++                             std::shared_ptr<facebook::react::MessageQueueThread> messageQueue) noexcept {
++    for (auto &entry : moduleProviders) {
++      modules.emplace_back(
++          entry.first,
++          [moduleName = entry.first, moduleProvider = entry.second, winrtReactContext]() noexcept {
++            IReactModuleBuilder moduleBuilder = winrt::make<ReactModuleBuilder>(winrtReactContext);
++            auto providedModule = moduleProvider(moduleBuilder);
++            return moduleBuilder.as<ReactModuleBuilder>()->MakeCxxModule(moduleName, providedModule);
++          },
++          messageQueue);
++    }
++  };
++
++  AddModules(m_moduleProviders, m_modulesWorkerQueue);
++  AddModules(m_uiThreadmoduleProviders, defaultQueueThread);
+ 
+   return modules;
+ }
+@@ -56,4 +58,10 @@ void NativeModulesProvider::AddModuleProvider(
+   m_moduleProviders.emplace(to_string(moduleName), moduleProvider);
+ }
+ 
++void NativeModulesProvider::AddUIThreadModuleProvider(
++    winrt::hstring const &moduleName,
++    ReactModuleProvider const &moduleProvider) noexcept {
++  m_uiThreadmoduleProviders.emplace(to_string(moduleName), moduleProvider);
++}
++
+ } // namespace winrt::Microsoft::ReactNative
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/NativeModulesProvider.h b/node_modules/react-native-windows/Microsoft.ReactNative/NativeModulesProvider.h
+index 9c5e17b..258f54b 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative/NativeModulesProvider.h
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/NativeModulesProvider.h
+@@ -16,9 +16,11 @@ class NativeModulesProvider final : public Mso::React::NativeModuleProvider2 {
+ 
+  public:
+   void AddModuleProvider(winrt::hstring const &moduleName, ReactModuleProvider const &moduleProvider) noexcept;
++  void AddUIThreadModuleProvider(winrt::hstring const &moduleName, ReactModuleProvider const &moduleProvider) noexcept;
+ 
+  private:
+   std::map<std::string, ReactModuleProvider> m_moduleProviders;
++  std::map<std::string, ReactModuleProvider> m_uiThreadmoduleProviders;
+   std::shared_ptr<facebook::react::MessageQueueThread> m_modulesWorkerQueue{nullptr};
+   IReactPackageBuilder m_packageBuilder;
+ };
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/React.h b/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/React.h
+index bd866a1..084367d 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/React.h
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/React.h
+@@ -67,6 +67,7 @@ struct IReactContext : IUnknown {
+   virtual winrt::Microsoft::ReactNative::IReactPropertyBag Properties() noexcept = 0;
+   virtual void CallJSFunction(std::string &&module, std::string &&method, folly::dynamic &&params) noexcept = 0;
+   virtual void DispatchEvent(int64_t viewTag, std::string &&eventName, folly::dynamic &&eventData) noexcept = 0;
++  virtual winrt::Windows::UI::Xaml::DependencyObject XamlElementFromTag(int64_t viewTag) noexcept = 0;
+ };
+ 
+ //! Settings per each IReactViewHost associated with an IReactHost instance.
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/ReactInstanceWin.cpp b/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/ReactInstanceWin.cpp
+index 6c47441..b93f1db 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/ReactInstanceWin.cpp
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/ReactInstanceWin.cpp
+@@ -5,6 +5,10 @@
+ #include "MoveOnCopy.h"
+ #include "MsoUtils.h"
+ 
++#include <INativeUIManager.h>
++#include <ReactUWP/IReactInstance.h>
++#include <ReactUWP\Views\ShadowNodeBase.h>
++
+ #include <Base/CoreNativeModules.h>
+ #include <ReactUWP/CreateUwpModules.h>
+ #include <ReactUWP/Modules/I18nModule.h>
+@@ -91,6 +95,17 @@ void ReactContext::DispatchEvent(int64_t viewTag, std::string &&eventName, folly
+   }
+ }
+ 
++winrt::Windows::UI::Xaml::DependencyObject ReactContext::XamlElementFromTag(int64_t viewTag) noexcept {
++  if (auto instance = m_reactInstance.GetStrongPtr()) {
++    if (instance->State() == ReactInstanceState::Loaded) {
++      auto shadowNode = instance->NativeUIManager()->getHost()->FindShadowNodeForTag(viewTag);
++      return static_cast<react::uwp::ShadowNodeBase *> (shadowNode)->GetView();
++    }
++  }
++
++  return nullptr;
++}
++
+ //=============================================================================================
+ // LoadedCallbackGuard ensures that the OnReactInstanceLoaded is always called.
+ // It calls OnReactInstanceLoaded in destructor with a cancellation error.
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/ReactInstanceWin.h b/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/ReactInstanceWin.h
+index 2e4467d..6fe6682 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/ReactInstanceWin.h
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/ReactInstanceWin.h
+@@ -47,6 +47,7 @@ class ReactContext final : public Mso::UnknownObject<IReactContext> {
+   winrt::Microsoft::ReactNative::IReactPropertyBag Properties() noexcept override;
+   void CallJSFunction(std::string &&module, std::string &&method, folly::dynamic &&params) noexcept override;
+   void DispatchEvent(int64_t viewTag, std::string &&eventName, folly::dynamic &&eventData) noexcept override;
++  winrt::Windows::UI::Xaml::DependencyObject XamlElementFromTag(int64_t viewTag) noexcept override;
+ 
+  private:
+   Mso::WeakPtr<ReactInstanceWin> m_reactInstance;
+diff --git a/node_modules/react-native-windows/ReactWindowsCore/ReactWindowsCore.log b/node_modules/react-native-windows/ReactWindowsCore/ReactWindowsCore.log
+new file mode 100644
+index 0000000..0588d34
+--- /dev/null
++++ b/node_modules/react-native-windows/ReactWindowsCore/ReactWindowsCore.log
+@@ -0,0 +1 @@
++﻿  ReactWindowsCore.vcxproj -> C:\GamingApp\new_rnw_app\node_modules\react-native-windows\target\x64\Debug\ReactWindowsCore\ReactWindowsCore.lib
