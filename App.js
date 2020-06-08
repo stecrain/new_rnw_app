@@ -89,6 +89,7 @@ const App: () => React$Node = () => {
 };
 
 const doit = (ref) => {
+  console.log("calling the func");
   const testModule = NativeModules.TestModule;
   testModule.setColor(findNodeHandle(ref.current));
 };

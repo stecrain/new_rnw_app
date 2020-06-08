@@ -30,10 +30,14 @@ namespace new_rnw_app
         REACT_METHOD(SetColor, L"setColor");
         void SetColor(int64_t tag) noexcept
         {
-            auto depObject = m_reactContext.XamlElementFromTag(tag);
+            m_reactContext.UIDispatcher().Post([=]() {
+                auto uiService = winrt::Microsoft::ReactNative::XamlUIService::FromContext(m_reactContext.Handle());
 
-            auto fe = depObject.as<winrt::Windows::UI::Xaml::Controls::Panel>();
-            fe.Background(winrt::Windows::UI::Xaml::Media::SolidColorBrush(winrt::Windows::UI::Colors::CornflowerBlue()));
+                auto depObject = uiService.ElementFromReactTag(tag);
+                auto fe = depObject.as<winrt::Windows::UI::Xaml::Controls::Panel>();
+                fe.Background(winrt::Windows::UI::Xaml::Media::SolidColorBrush(winrt::Windows::UI::Colors::CornflowerBlue()));
+                });
+                       
         }
 
         REACT_EVENT(AddEvent);

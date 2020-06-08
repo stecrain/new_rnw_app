@@ -1,0 +1,294 @@
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.cpp b/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.cpp
+index 1bcb25c..ce75867 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.cpp
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/IReactContext.cpp
+@@ -4,6 +4,7 @@
+ #include "pch.h"
+ #include "IReactContext.h"
+ #include "DynamicWriter.h"
++#include "XamlUIService.h"
+ 
+ namespace winrt::Microsoft::ReactNative::implementation {
+ 
+@@ -17,18 +18,17 @@ IReactDispatcher ReactContext::UIDispatcher() noexcept {
+   return Properties().Get(ReactDispatcherHelper::UIDispatcherProperty()).try_as<IReactDispatcher>();
+ }
+ 
++// Deprecated: Use XamlUIService directly.
+ void ReactContext::DispatchEvent(
+     winrt::Windows::UI::Xaml::FrameworkElement const &view,
+     hstring const &eventName,
+     JSValueArgWriter const &eventDataArgWriter) noexcept {
+-  folly::dynamic eventData; // default to NULLT
+-  if (eventDataArgWriter != nullptr) {
+-    auto eventDataWriter = winrt::make_self<DynamicWriter>();
+-    eventDataArgWriter(*eventDataWriter);
+-    eventData = eventDataWriter->TakeValue();
++  auto xamlUIService = Properties()
++                           .Get(XamlUIService::XamlUIServiceProperty().Handle())
++                           .try_as<winrt::Microsoft::ReactNative::XamlUIService>();
++  if (xamlUIService) {
++    xamlUIService.DispatchEvent(view, eventName, eventDataArgWriter);
+   }
+-
+-  m_context->DispatchEvent(unbox_value<int64_t>(view.Tag()), to_string(eventName), std::move(eventData));
+ }
+ 
+ void ReactContext::CallJSFunction(
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/Microsoft.ReactNative.vcxproj b/node_modules/react-native-windows/Microsoft.ReactNative/Microsoft.ReactNative.vcxproj
+index f0c0aeb..8d02ff4 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative/Microsoft.ReactNative.vcxproj
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/Microsoft.ReactNative.vcxproj
+@@ -348,6 +348,7 @@
+       <DependentUpon>XamlHelper.idl</DependentUpon>
+       <SubType>Code</SubType>
+     </ClInclude>
++    <ClInclude Include="XamlUIService.h" />
+   </ItemGroup>
+   <ItemGroup>
+     <ClCompile Include="..\ReactUWP\Base\CoreNativeModules.cpp" />
+@@ -515,6 +516,7 @@
+       <DependentUpon>XamlHelper.idl</DependentUpon>
+       <SubType>Code</SubType>
+     </ClCompile>
++    <ClCompile Include="XamlUIService.cpp" />
+   </ItemGroup>
+   <ItemGroup>
+     <Midl Include="..\ReactUWP\Views\cppwinrt\AccessibilityAction.idl" />
+@@ -556,6 +558,7 @@
+       <SubType>Designer</SubType>
+     </Midl>
+     <Midl Include="XamlHelper.idl" />
++    <Midl Include="XamlUIService.idl" />
+   </ItemGroup>
+   <ItemGroup>
+     <None Include="packages.config" />
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/Microsoft.ReactNative.vcxproj.filters b/node_modules/react-native-windows/Microsoft.ReactNative/Microsoft.ReactNative.vcxproj.filters
+index 9926dbe..ad906f4 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative/Microsoft.ReactNative.vcxproj.filters
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/Microsoft.ReactNative.vcxproj.filters
+@@ -92,9 +92,6 @@
+     <ClCompile Include="..\ReactUWP\Modules\AppThemeModuleUwp.cpp">
+       <Filter>Modules</Filter>
+     </ClCompile>
+-    <ClCompile Include="..\ReactUWP\Modules\ClipboardModule.cpp">
+-      <Filter>Modules</Filter>
+-    </ClCompile>
+     <ClCompile Include="..\ReactUWP\Modules\DeviceInfoModule.cpp">
+       <Filter>Modules</Filter>
+     </ClCompile>
+@@ -304,7 +301,6 @@
+     </ClCompile>
+     <ClCompile Include="ReactSupport.cpp" />
+     <ClCompile Include="RedBox.cpp" />
+-    <ClCompile Include="TestHook.cpp" />
+     <ClCompile Include="Threading\BatchingQueueThread.cpp">
+       <Filter>Threading</Filter>
+     </ClCompile>
+@@ -318,6 +314,7 @@
+     <ClCompile Include="Views\ReactRootControl.cpp">
+       <Filter>Views</Filter>
+     </ClCompile>
++    <ClCompile Include="XamlUIService.cpp" />
+   </ItemGroup>
+   <ItemGroup>
+     <ClInclude Include="..\include\ReactUWP\Utils\CppWinrtLessExceptions.h">
+@@ -452,9 +449,6 @@
+     <ClInclude Include="..\ReactUWP\Modules\AppThemeModuleUwp.h">
+       <Filter>Modules</Filter>
+     </ClInclude>
+-    <ClInclude Include="..\ReactUWP\Modules\ClipboardModule.h">
+-      <Filter>Modules</Filter>
+-    </ClInclude>
+     <ClInclude Include="..\ReactUWP\Modules\DeviceInfoModule.h">
+       <Filter>Modules</Filter>
+     </ClInclude>
+@@ -657,7 +651,6 @@
+     </ClInclude>
+     <ClInclude Include="ReactSupport.h" />
+     <ClInclude Include="RedBox.h" />
+-    <ClInclude Include="TestHook.h" />
+     <ClInclude Include="Threading\BatchingQueueThread.h">
+       <Filter>Threading</Filter>
+     </ClInclude>
+@@ -671,6 +664,7 @@
+     <ClInclude Include="Views\ReactRootControl.h">
+       <Filter>Views</Filter>
+     </ClInclude>
++    <ClInclude Include="XamlUIService.h" />
+   </ItemGroup>
+   <ItemGroup>
+     <Midl Include="..\ReactUWP\Views\cppwinrt\AccessibilityAction.idl">
+@@ -695,7 +689,6 @@
+     <Midl Include="IReactNonAbiValue.idl" />
+     <Midl Include="IReactPackageBuilder.idl" />
+     <Midl Include="IReactPackageProvider.idl" />
+-    <Midl Include="IRedBoxHandler.idl" />
+     <Midl Include="IReactPropertyBag.idl" />
+     <Midl Include="IViewManager.idl" />
+     <Midl Include="NoExceptionAttribute.idl" />
+@@ -706,6 +699,8 @@
+     <Midl Include="ReactNativeHost.idl" />
+     <Midl Include="ReactRootView.idl" />
+     <Midl Include="XamlHelper.idl" />
++    <Midl Include="RedBoxHandler.idl" />
++    <Midl Include="XamlUIService.idl" />
+   </ItemGroup>
+   <ItemGroup>
+     <None Include="microsoft.reactnative.def" />
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/ReactInstanceWin.cpp b/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/ReactInstanceWin.cpp
+index df17d2d..f9edb7c 100644
+--- a/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/ReactInstanceWin.cpp
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/ReactHost/ReactInstanceWin.cpp
+@@ -9,6 +9,7 @@
+ #include <ReactUWP/CreateUwpModules.h>
+ #include <ReactUWP/Modules/I18nModule.h>
+ #include <Threading/MessageDispatchQueue.h>
++#include <XamlUIService.h>
+ #include "ReactErrorProvider.h"
+ 
+ #include "Microsoft.ReactNative/Threading/MessageQueueThreadFactory.h"
+@@ -481,6 +482,10 @@ void ReactInstanceWin::InitUIManager() noexcept {
+   react::uwp::AddPolyesterViewManagers(viewManagers, m_legacyReactInstance);
+ 
+   auto uiManager = react::uwp::CreateUIManager2(std::move(viewManagers));
++  auto wkUIManger = std::weak_ptr<facebook::react::IUIManager>(uiManager);
++  m_reactContext->Properties().Set(
++      winrt::Microsoft::ReactNative::implementation::XamlUIService::XamlUIServiceProperty().Handle(),
++      winrt::make<winrt::Microsoft::ReactNative::implementation::XamlUIService>(std::move(wkUIManger), m_reactContext));
+   m_uiManager.Exchange(std::move(uiManager));
+ }
+ 
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/XamlUIService.cpp b/node_modules/react-native-windows/Microsoft.ReactNative/XamlUIService.cpp
+new file mode 100644
+index 0000000..759ec14
+--- /dev/null
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/XamlUIService.cpp
+@@ -0,0 +1,53 @@
++// Copyright (c) Microsoft Corporation. All rights reserved.
++// Licensed under the MIT License.
++
++#include "pch.h"
++#include "XamlUIService.h"
++#include "XamlUIService.g.cpp"
++#include "DynamicWriter.h"
++#include "Views/ShadowNodeBase.h"
++
++namespace winrt::Microsoft::ReactNative::implementation {
++
++XamlUIService::XamlUIService(
++    std::weak_ptr<facebook::react::IUIManager> &&uimanager,
++    Mso::CntPtr<Mso::React::IReactContext> &&context) noexcept
++    : m_wkUIManager(uimanager), m_context(context) {}
++
++Windows::UI::Xaml::DependencyObject XamlUIService::ElementFromReactTag(int64_t reactTag) noexcept {
++  if (auto strongUIManager = m_wkUIManager.lock()) {
++    auto shadowNode = strongUIManager->FindShadowNodeForTag(reactTag);
++    if (!shadowNode)
++      return nullptr;
++
++    return static_cast<react::uwp::ShadowNodeBase *>(shadowNode)->GetView();
++  }
++  return nullptr;
++}
++
++/*static*/ winrt::Microsoft::ReactNative::XamlUIService XamlUIService::FromContext(IReactContext context) {
++  return context.Properties()
++      .Get(XamlUIService::XamlUIServiceProperty().Handle())
++      .try_as<winrt::Microsoft::ReactNative::XamlUIService>();
++}
++
++void XamlUIService::DispatchEvent(
++    Windows::UI::Xaml::FrameworkElement const &view,
++    hstring const &eventName,
++    JSValueArgWriter const &eventDataArgWriter) noexcept {
++  folly::dynamic eventData; // default to NULLT
++  if (eventDataArgWriter != nullptr) {
++    auto eventDataWriter = winrt::make_self<DynamicWriter>();
++    eventDataArgWriter(*eventDataWriter);
++    eventData = eventDataWriter->TakeValue();
++  }
++
++  m_context->DispatchEvent(unbox_value<int64_t>(view.Tag()), to_string(eventName), std::move(eventData));
++}
++
++/*static*/ ReactPropertyId<XamlUIService> XamlUIService::XamlUIServiceProperty() noexcept {
++  static ReactPropertyId<XamlUIService> uiManagerProperty{L"ReactNative.UIManager", L"XamlUIManager"};
++  return uiManagerProperty;
++}
++
++} // namespace winrt::Microsoft::ReactNative::implementation
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/XamlUIService.h b/node_modules/react-native-windows/Microsoft.ReactNative/XamlUIService.h
+new file mode 100644
+index 0000000..bfe4cb5
+--- /dev/null
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/XamlUIService.h
+@@ -0,0 +1,38 @@
++// Copyright (c) Microsoft Corporation. All rights reserved.
++// Licensed under the MIT License.
++
++#pragma once
++
++#include "XamlUIService.g.h"
++#include "IUIManager.h"
++
++#include "ReactHost/React.h"
++#include "ReactPropertyBag.h"
++#include "winrt/Microsoft.ReactNative.h"
++
++namespace winrt::Microsoft::ReactNative::implementation {
++
++struct XamlUIService : XamlUIServiceT<XamlUIService> {
++ public:
++  XamlUIService(
++      std::weak_ptr<facebook::react::IUIManager> &&uimanager,
++      Mso::CntPtr<Mso::React::IReactContext> &&context) noexcept;
++  static ReactPropertyId<XamlUIService> XamlUIServiceProperty() noexcept;
++
++  Windows::UI::Xaml::DependencyObject ElementFromReactTag(int64_t reactTag) noexcept;
++  static winrt::Microsoft::ReactNative::XamlUIService FromContext(IReactContext context);
++  void DispatchEvent(
++      Windows::UI::Xaml::FrameworkElement const &view,
++      hstring const &eventName,
++      JSValueArgWriter const &eventDataArgWriter) noexcept;
++
++ private:
++  std::weak_ptr<facebook::react::IUIManager> m_wkUIManager;
++  Mso::CntPtr<Mso::React::IReactContext> m_context;
++};
++
++} // namespace winrt::Microsoft::ReactNative::implementation
++
++namespace winrt::Microsoft::ReactNative::factory_implementation {
++struct XamlUIService : XamlUIServiceT<XamlUIService, implementation::XamlUIService> {};
++} // namespace winrt::Microsoft::ReactNative::factory_implementation
+diff --git a/node_modules/react-native-windows/Microsoft.ReactNative/XamlUIService.idl b/node_modules/react-native-windows/Microsoft.ReactNative/XamlUIService.idl
+new file mode 100644
+index 0000000..b378fbe
+--- /dev/null
++++ b/node_modules/react-native-windows/Microsoft.ReactNative/XamlUIService.idl
+@@ -0,0 +1,17 @@
++// Copyright (c) Microsoft Corporation. All rights reserved.
++// Licensed under the MIT License.
++
++import "IReactContext.idl";
++
++namespace Microsoft.ReactNative {
++
++  [default_interface][webhosthidden] runtimeclass XamlUIService {
++    static XamlUIService FromContext(IReactContext context);
++
++    Windows.UI.Xaml.DependencyObject ElementFromReactTag(Int64 reactTag);
++
++    // Dispatch UI event. This method is to be moved to IReactViewContext.
++    void DispatchEvent(Windows.UI.Xaml.FrameworkElement view, String eventName, JSValueArgWriter eventDataArgWriter);
++  }
++
++} // namespace ReactNative
+diff --git a/node_modules/react-native-windows/ReactWindowsCore/ReactWindowsCore.log b/node_modules/react-native-windows/ReactWindowsCore/ReactWindowsCore.log
+new file mode 100644
+index 0000000..4d49b10
+--- /dev/null
++++ b/node_modules/react-native-windows/ReactWindowsCore/ReactWindowsCore.log
+@@ -0,0 +1 @@
++﻿  ReactWindowsCore.vcxproj -> C:\repos\new_rnw_app\node_modules\react-native-windows\target\x64\Debug\ReactWindowsCore\ReactWindowsCore.lib

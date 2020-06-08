@@ -5448,10 +5448,10 @@ react-is@^16.12.0, react-is@^16.8.1, react-is@^16.8.4, react-is@^16.8.6:
   resolved "https://registry.yarnpkg.com/react-is/-/react-is-16.13.1.tgz#789729a4dc36de2999dc156dd6c1d9c18cea56a4"
   integrity sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==
 
-react-native-windows@^0.62.0-0:
-  version "0.62.0-preview.9"
-  resolved "https://registry.yarnpkg.com/react-native-windows/-/react-native-windows-0.62.0-preview.9.tgz#57d5ebc13d898890ddb3ee1301f4ca2c3d13e200"
-  integrity sha512-UZAEExlOPuZyk4t6ly8Ip32Zh1l+YhSS1V2EgjBmskeN+Sz9SS3atjIUrXpfvrxNw+XXK2UZdgvnTcgJaKFH6A==
+react-native-windows@0.62.0-preview.11:
+  version "0.62.0-preview.11"
+  resolved "https://registry.yarnpkg.com/react-native-windows/-/react-native-windows-0.62.0-preview.11.tgz#2e7e38f34aad113c2050aa548bc2c8c7bd459382"
+  integrity sha512-19pcDhnaDr9zBii/ET7sRxzTcKgcTn0+/vrpn5KF01Ik1U3SPQxkazpA5yBe3di8gOsJA/dHsUhexdkKeA2piw==
   dependencies:
     "@babel/runtime" "^7.8.4"
     cli-spinners "^2.2.0"
